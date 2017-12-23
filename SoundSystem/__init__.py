@@ -1,2 +1,2 @@
-from .Sound import Sound
+from .Sound import Sound, StatesEnum
 from .SoundManager import SoundManager

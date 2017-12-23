@@ -8,6 +8,13 @@ from ._errorChecking import _checkError as _ckerr
 from .ffmpeg_reader import FFMPEG_AudioReader
 
 
+class StatesEnum(object):
+    Stopped = 'Stopped'
+    Playing = 'Playing'
+    Paused = 'Paused'
+    Initial = 'Initial'
+
+
 class Sound(object):
     def __init__(self, manager, filePath, isStream, bufferSize, ffmpegPath='ffmpeg'):
         self._filePath = filePath
@@ -26,18 +33,12 @@ class Sound(object):
         sourceID = ALuint()
         alGenSources(1, byref(sourceID))
         self._checkError()
+        self._sourceID = sourceID
 
-        alSourcef(sourceID, AL_PITCH, 1)
-        self._checkError()
-        alSourcef(sourceID, AL_GAIN, 1)
-        self._checkError()
         alSource3f(sourceID, AL_POSITION, 0, 0, 0)
         self._checkError()
         alSource3f(sourceID, AL_VELOCITY, 0, 0, 0)
         self._checkError()
-        alSourcei(sourceID, AL_LOOPING, AL_FALSE)
-        self._checkError()
-        self._sourceID = sourceID
 
         # read chunk or all file
         totalBytes = ar.buffer
@@ -66,11 +67,99 @@ class Sound(object):
                 else:
                     return AL_FORMAT_MONO8
             else:
-                return -1
+                raise RuntimeError('unknown sound format')
 
         # upload data to buffer
-        alBufferData(bufferID, to_al_format(ar.nchannels, ar.nbytes), totalBytes, len(totalBytes), ar.fps)
+        alBufferData(bufferID, to_al_format(ar.nchannels, 8 * ar.nbytes), totalBytes, len(totalBytes), ar.fps)
         self._checkError()
+
+        # bind source
+        if isStream:
+            alSourceQueueBuffers(source, n, byref(buffers))  # for streaming
+        else:
+            alSourcei(sourceID, AL_BUFFER, bufferID.value)
+        self._checkError()
+
+    def play(self):
+        alSourcePlay(self._sourceID)
+        self._checkError()
+
+    @property
+    def looped(self):
+        value = ALuint()
+        alSourcei(self._sourceID, AL_LOOPING, byref(value))
+        self._checkError()
+        return bool(value.value)
+
+    @looped.setter
+    def looped(self, value):
+        alSourcei(self._sourceID, AL_LOOPING, value)
+        self._checkError()
+
+    @property
+    def position(self):
+        # http://openal.996291.n3.nabble.com/Get-Audio-time-or-buffer-position-tp1874p1875.html
+        sourceID = self._sourceID
+        pos = ALint()
+        alGetSourcei(sourceID, AL_SAMPLE_OFFSET, byref(pos))
+        self._checkError()
+        return pos.value
+
+    @position.setter
+    def position(self, value):
+        pass
+
+    @property
+    def volume(self):
+        val = ALuint()
+        alGetSourcef(sourceID, AL_GAIN, byref(val))
+        self._checkError()
+        return val.value * 100
+
+    @volume.setter
+    def volume(self, value):
+        alSourcef(sourceID, AL_GAIN, value / 100)
+        self._checkError()
+
+    @property
+    def pitch(self):
+        val = ALuint()
+        alGetSourcef(sourceID, AL_PITCH, byref(val))
+        self._checkError()
+        return val.value * 100
+
+    @pitch.setter
+    def pitch(self, value):
+        alSourcef(sourceID, AL_PITCH, value / 100)
+        self._checkError()
+
+    @property
+    def state(self):
+        state = ALint()
+        alGetSourcei(self._sourceID, AL_SOURCE_STATE, byref(state))
+        self._checkError()
+        state = state.value
+        if state == AL_PLAYING:
+            return StatesEnum.Playing
+        elif state == AL_STOPPED:
+            return StatesEnum.Stopped
+        elif state == AL_PAUSED:
+            return StatesEnum.Paused
+        elif state == AL_INITIAL:
+            return StatesEnum.Initial
+        else:
+            raise RuntimeError('unknown source state')
+
+    @state.setter
+    def state(self, state):
+        if state == StatesEnum.Playing:
+            self.play()
+        elif state == StatesEnum.Stopped:
+            self.stop()
+        elif state == StatesEnum.Paused:
+            self.pause()
+        else:
+            raise RuntimeError('\'{}\' state not allowed to set'.format(state))
 
     def _checkError(self):
         _ckerr(self._device)
@@ -79,9 +168,9 @@ class Sound(object):
         self.__del__()
 
     def __del__(self):
-        alDeleteSources(1, self._sourceID)
-        # next raises NameError: name 'alDeleteBuffers' is not defined when imported with *
         try:
+            alDeleteSources(1, self._sourceID)
+            # next raises 'NameError: name 'alDeleteBuffers' is not defined' when imported with *
             delBuff(1, self._bufferID)  # todo: handle multiple buffers (if managed locally)
-        except NameError as err:
+        except Exception as err:
             warn(str(err))

@@ -1,7 +1,7 @@
 from __future__ import print_function
-from SoundSystem import SoundManager, StatesEnum
+from hissing import Manager, StatesEnum
 
-sm = SoundManager()
+sm = Manager()
 
 file = './ice_cubes_glass/ice_cube.mp3'
 '''

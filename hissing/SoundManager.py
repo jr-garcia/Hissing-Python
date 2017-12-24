@@ -5,7 +5,7 @@ from .Sound import Sound
 from ._errorChecking import _checkError as _ckerr
 
 
-class SoundManager(object):
+class Manager(object):
     def __init__(self, ffmpegPath='ffmpeg', audioBuffer=44100):
         self.ffmpegPath = ffmpegPath
         self.audioBuffer = audioBuffer

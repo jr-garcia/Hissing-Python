@@ -5,8 +5,8 @@ sm = Manager()
 
 file = './sounds/big_buck_bunny/bbb_stereo_0_8_3.ogg'
 '''
-Ice sound by Daniel Simion
-Dowmloaded from http://soundbible.com/2182-Ice-Cubes-Glass.html
+Sound sample extracted from Big Buck Bunny short, at time 0:8:3.458
+(c) copyright 2008, Blender Foundation / www.bigbuckbunny.org
 '''
 
 sound = sm.loadFile(file, isStream=True)

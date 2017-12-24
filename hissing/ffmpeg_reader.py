@@ -14,8 +14,6 @@ import re
 import subprocess as sp
 import time
 import warnings
-from subprocess import DEVNULL
-
 import numpy as np
 
 FFMPEG_PATH = 'ffmpeg'
@@ -39,7 +37,7 @@ def ffmpeg_parse_infos(filename, print_infos=False, check_duration=True, fps_sou
     if is_GIF:
         cmd += ["-f", "null", "/dev/null"]
 
-    popen_params = {"bufsize": 10 ** 5, "stdout": sp.PIPE, "stderr": sp.PIPE, "stdin": DEVNULL}
+    popen_params = {"bufsize": 10 ** 5, "stdout": sp.PIPE, "stderr": sp.PIPE}
 
     if os.name == "nt":
         popen_params["creationflags"] = 0x08000000
@@ -250,7 +248,7 @@ class FFMPEG_AudioReader:
         cmd = ([FFMPEG_PATH] + i_arg + ['-loglevel', 'error', '-f', self.f, '-acodec', self.acodec, '-ar', "%d" % self.fps,
                                      '-ac', '%d' % self.nchannels, '-'])
 
-        popen_params = {"bufsize": self.buffersize, "stdout": sp.PIPE, "stderr": sp.PIPE, "stdin": DEVNULL}
+        popen_params = {"bufsize": self.buffersize, "stdout": sp.PIPE, "stderr": sp.PIPE}
 
         if os.name == "nt":
             popen_params["creationflags"] = 0x08000000

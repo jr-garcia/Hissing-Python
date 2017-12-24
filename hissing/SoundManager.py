@@ -6,16 +6,17 @@ from ._errorChecking import _checkError as _ckerr
 
 
 class Manager(object):
-    def __init__(self, ffmpegPath='ffmpeg', audioBuffer=44100):
-        self.ffmpegPath = ffmpegPath
-        self.audioBuffer = audioBuffer
+    def __init__(self, ffmpegPath='ffmpeg', bufferSize=44100, maxBufferNumber=3):
+        self._ffmpegPath = ffmpegPath
+        self._bufferSize = bufferSize
         self._device = None
+        self._maxBufferNumber = maxBufferNumber
+        self._sounds = []
+
         device = alcOpenDevice(None)
         if not device:
             self._checkError()
         self._device = device
-
-        self._sounds = []
 
         context = alcCreateContext(device, None)
         if not alcMakeContextCurrent(context):
@@ -24,7 +25,7 @@ class Manager(object):
         self._context = context
 
     def loadFile(self, filePath, isStream=False):
-        sound = Sound(self, filePath, isStream, self.audioBuffer, self.ffmpegPath)
+        sound = Sound(self, filePath, isStream, self._bufferSize, self._ffmpegPath)
         self._sounds.append(sound)
         return sound
 

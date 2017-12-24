@@ -226,8 +226,8 @@ class BufferFillingThread(Thread):
         alGenBuffers(maxBufferNumber, buffers)
         self._checkError()
         self.buffers.extend(buffers)
-        while len(self.buffers) > 0:
-            availableBufferID = ALuint(self.buffers.pop(0))
+        for i in range(maxBufferNumber):
+            availableBufferID = ALuint(buffers[i])
             chunk = audioReader.read_chunk(bufferSize)
             self.uploadData(availableBufferID, chunk)
             self.queueBuffer(availableBufferID)
@@ -288,4 +288,4 @@ class BufferFillingThread(Thread):
 
     def __del__(self):
         for bufferID in self.buffers:
-            delBuff(1, bufferID)
+            delBuff(1, ALuint(bufferID))

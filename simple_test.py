@@ -3,7 +3,7 @@ from hissing import Manager, StatesEnum
 
 sm = Manager()
 
-file = './ice_cubes_glass/ice_cube.mp3'
+file = './sounds/ice_cubes_glass/ice_cube.mp3'
 '''
 Ice sound by Daniel Simion
 Dowmloaded from http://soundbible.com/2182-Ice-Cubes-Glass.html

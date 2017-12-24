@@ -14,36 +14,23 @@ class Manager(object):
         self._sounds = []
 
         device = alcOpenDevice(None)
+        self._checkError()
         if not device:
-            self._checkError()
+            raise RuntimeError('unknown error when opening device')
         self._device = device
 
         context = alcCreateContext(device, None)
+        if not context:
+            raise RuntimeError('unknown error when creating context')
         if not alcMakeContextCurrent(context):
             self._checkError()
 
         self._context = context
 
     def loadFile(self, filePath, isStream=False):
-        sound = Sound(self, filePath, isStream, self._bufferSize, self._ffmpegPath)
+        sound = Sound(self, filePath, isStream, self._bufferSize, self._maxBufferNumber, self._ffmpegPath)
         self._sounds.append(sound)
         return sound
-
-    def updateListener(self, position, lookFixed, rotMat):
-        looklist = list(lookFixed)
-        if self._lastListenerPosition != vec3(position):
-            self.listenerPosition = list(position)
-            self._lastListenerPosition = vec3(position)
-        if self._lastListenerOrientation != looklist:
-            # orien = list(lookFixed.normalize())
-            orien = looklist
-            # orien.extend([0, 1, 0])
-            orien.extend(list(rotMat * vec3(0, 1, 0)))
-            self.sink.listener.orientation = orien
-            self._lastListenerOrientation = looklist
-        self.sink.update()
-        for sound in self._sounds.values():
-            sound.update()
 
     @property
     def listenerPosition(self):

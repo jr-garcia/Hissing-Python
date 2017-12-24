@@ -1,11 +1,28 @@
 from ctypes import byref
 from warnings import warn
+from threading import Thread
 
 from openal.al import *
 from openal.al import alDeleteBuffers as delBuff
 
 from ._errorChecking import _checkError as _ckerr
 from .ffmpeg_reader import FFMPEG_AudioReader
+
+
+def to_al_format(channels, samples):
+    stereo = channels > 1
+    if samples == 16:
+        if stereo:
+            return AL_FORMAT_STEREO16
+        else:
+            return AL_FORMAT_MONO16
+    elif samples == 8:
+        if stereo:
+            return AL_FORMAT_STEREO8
+        else:
+            return AL_FORMAT_MONO8
+    else:
+        raise RuntimeError('unknown sound format')
 
 
 class StatesEnum(object):
@@ -16,18 +33,18 @@ class StatesEnum(object):
 
 
 class Sound(object):
-    def __init__(self, manager, filePath, isStream, bufferSize, ffmpegPath='ffmpeg'):
+    def __init__(self, manager, filePath, isStream, bufferSize, maxBufferN, ffmpegPath='ffmpeg'):
         self._filePath = filePath
         self._manager = manager
         self._isStream = isStream
+        self._device = manager._device
         self._bufferSize = bufferSize
         self._ffmpegPath = ffmpegPath
-        self._device = manager._device
 
         bufferSize = self._bufferSize
 
         # create the frames extactor
-        ar = FFMPEG_AudioReader(ffmpegPath, filePath, bufferSize, nbytes=2)
+        reader = FFMPEG_AudioReader(ffmpegPath, filePath, bufferSize, nbytes=2)
 
         # create a source
         sourceID = ALuint()
@@ -35,50 +52,28 @@ class Sound(object):
         self._checkError()
         self._sourceID = sourceID
 
-        alSource3f(sourceID, AL_POSITION, 0, 0, 0)
-        self._checkError()
-        alSource3f(sourceID, AL_VELOCITY, 0, 0, 0)
-        self._checkError()
-
         # read chunk or all file
-        totalBytes = ar.buffer
         if isStream:
-            raise NotImplemented('! no streaming')
+            self.filler = BufferFillingThread(manager._device, sourceID, bufferSize, maxBufferN, reader)
+            self.filler.start()
         else:
-            while ar.pos <= ar.nframes:
-                totalBytes += ar.read_chunk(bufferSize)
+            totalBytes = reader.buffer
+            while reader.pos < reader.nframes:
+                totalBytes += reader.read_chunk(bufferSize)
 
-        # create a buffer
-        bufferID = ALuint()
-        alGenBuffers(1, byref(bufferID))  # todo: change to MAXBUFFERCOUNT
-        self._checkError()
-        self._bufferID = bufferID
+            # create a buffer
+            bufferID = ALuint()
+            alGenBuffers(1, byref(bufferID))
+            self._checkError()
+            self._bufferID = bufferID
 
-        def to_al_format(channels, samples):
-            stereo = channels > 1
-            if samples == 16:
-                if stereo:
-                    return AL_FORMAT_STEREO16
-                else:
-                    return AL_FORMAT_MONO16
-            elif samples == 8:
-                if stereo:
-                    return AL_FORMAT_STEREO8
-                else:
-                    return AL_FORMAT_MONO8
-            else:
-                raise RuntimeError('unknown sound format')
+            # upload data to buffer
+            alBufferData(bufferID, to_al_format(reader.nchannels, 8 * reader.nbytes), totalBytes, len(totalBytes), reader.fps)
+            self._checkError()
 
-        # upload data to buffer
-        alBufferData(bufferID, to_al_format(ar.nchannels, 8 * ar.nbytes), totalBytes, len(totalBytes), ar.fps)
-        self._checkError()
-
-        # bind source
-        if isStream:
-            alSourceQueueBuffers(source, n, byref(buffers))  # for streaming
-        else:
+            # bind source
             alSourcei(sourceID, AL_BUFFER, bufferID.value)
-        self._checkError()
+            self._checkError()
 
     def play(self):
         alSourcePlay(self._sourceID)
@@ -97,7 +92,9 @@ class Sound(object):
         self._checkError()
 
     @property
-    def position(self):
+    def time(self):
+        # if self._isStream:
+        #     raise NotImplementedError('')
         # http://openal.996291.n3.nabble.com/Get-Audio-time-or-buffer-position-tp1874p1875.html
         sourceID = self._sourceID
         pos = ALint()
@@ -105,9 +102,29 @@ class Sound(object):
         self._checkError()
         return pos.value
 
+    @time.setter
+    def time(self, value):
+        raise NotImplementedError('')
+
+    @property
+    def position(self):
+        raise NotImplementedError('')
+
     @position.setter
     def position(self, value):
-        pass
+        x, y, z = value
+        alSource3f(sourceID, AL_POSITION, x, y, z)  # todo: change to handle vector
+        self._checkError()
+
+    @property
+    def velocity(self):
+        raise NotImplementedError('')
+
+    @velocity.setter
+    def velocity(self, value):
+        x, y, z = value
+        alSource3f(sourceID, AL_VELOCITY, x, y, z)  # todo: change to handle vector
+        self._checkError()
 
     @property
     def volume(self):
@@ -169,8 +186,84 @@ class Sound(object):
 
     def __del__(self):
         try:
-            alDeleteSources(1, self._sourceID)
-            # next raises 'NameError: name 'alDeleteBuffers' is not defined' when imported with *
-            delBuff(1, self._bufferID)  # todo: handle multiple buffers (if managed locally)
+            if hasattr(self, '_sourceID'):
+                alDeleteSources(1, self._sourceID)
+            if hasattr(self, '_bufferID'):
+                # next raises 'NameError: name 'alDeleteBuffers' is not defined' when imported with *
+                delBuff(1, self._bufferID)
         except Exception as err:
             warn(str(err))
+
+
+class BufferFillingThread(Thread):
+    def __init__(self, device, sourceID, bufferSize, maxBufferNumber, audioReader):
+        super(BufferFillingThread, self).__init__()
+        self.device = device
+        self.sourceID = sourceID
+        self.bufferSize = bufferSize
+        self.maxBufferNumber = maxBufferNumber
+        self.audioReader = audioReader
+        self.buffers = []
+        self.playedBuffersLenght = 0
+
+        # create buffers
+        buffers = (ALuint * maxBufferNumber)()
+        alGenBuffers(maxBufferNumber, buffers)
+        self._checkError()
+        self.buffers.extend(buffers)
+        while len(self.buffers) > 0:
+            availableBufferID = ALuint(self.buffers.pop(0))
+            chunk = audioReader.read_chunk(bufferSize)
+            self.uploadData(availableBufferID, chunk)
+            self.queueBuffer(availableBufferID)
+        
+    @property
+    def playedLength(self):
+        return self.playedBuffersLenght
+
+    def run(self):
+        processedBuffers = ALint()
+        reader = self.audioReader
+        bufferSize = self.bufferSize
+        chunk = None
+        sourceID = self.sourceID
+
+        while reader.pos < reader.nframes:
+            if chunk is None:
+                chunk = reader.read_chunk(bufferSize)
+
+            alGetSourcei(sourceID, AL_BUFFERS_PROCESSED, byref(processedBuffers))
+
+            if processedBuffers.value > 0:
+                # new buffer available
+                self.playedBuffersLenght += bufferSize
+                
+                availableBufferID = ALuint()
+                self.unQueueBuffer(availableBufferID)
+
+                # upload data to buffer
+                self.uploadData(availableBufferID, chunk)
+                # queue buffer into source
+                self.queueBuffer(availableBufferID)
+                chunk = None
+
+    def queueBuffer(self, availableBufferID):
+        alSourceQueueBuffers(self.sourceID, 1, byref(availableBufferID))
+        self._checkError()
+
+    def unQueueBuffer(self, availableBufferID):
+        alSourceUnqueueBuffers(self.sourceID, 1, byref(availableBufferID))
+        self._checkError()
+
+    def uploadData(self, availableBufferID, chunk):
+        reader = self.audioReader
+        alBufferData(availableBufferID, to_al_format(reader.nchannels, 8 * reader.nbytes), chunk, len(chunk),
+                     reader.fps)
+        self._checkError()
+
+    def _checkError(self):
+        _ckerr(self.device)
+
+    def __del__(self):
+        for bufferID in self.buffers:
+            delBuff(1, bufferID)

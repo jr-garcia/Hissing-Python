@@ -109,6 +109,15 @@ class Sound(object):
         raise NotImplementedError('')
 
     @property
+    def length(self):
+        reader = self._reader
+        return reader.nframes / reader.fps
+
+    @length.setter
+    def length(self, value):
+        raise NotImplementedError('')
+
+    @property
     def position(self):
         raise NotImplementedError('')
 

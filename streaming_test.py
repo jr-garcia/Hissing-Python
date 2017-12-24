@@ -9,14 +9,14 @@ Ice sound by Daniel Simion
 Dowmloaded from http://soundbible.com/2182-Ice-Cubes-Glass.html
 '''
 
-sound = sm.loadFile(file, isStreaming=True)
+sound = sm.loadFile(file, isStream=True)
 sound.play()
 
 state = sound.state
-print(state, end='')
+print(sound.state, end='')
 while state == StatesEnum.Playing:
-    pos = sound.position
-    print('\r' + state + '... Positon: ' + str(pos), end='')
+    pos = sound.time
+    print('\r' + state + '... Position: ' + str(pos), end='')
     state = sound.state
 
 print('\rFinished')

@@ -12,9 +12,6 @@ def _checkError(device):
     def get_error_message(x):
         return _ERRMAP.get(x, "Unknown Error " + str(x))
 
-    if device:
-        err = alcGetError(device)
-    else:
-        err = alGetError()
+    err = alcGetError(device)
     if err != AL_NO_ERROR:
         raise RuntimeError(get_error_message(err))

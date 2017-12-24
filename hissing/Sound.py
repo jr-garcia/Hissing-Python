@@ -45,6 +45,7 @@ class Sound(object):
 
         # create the frames extactor
         reader = FFMPEG_AudioReader(ffmpegPath, filePath, bufferSize, nbytes=2)
+        self._reader = reader
 
         # create a source
         sourceID = ALuint()
@@ -93,14 +94,15 @@ class Sound(object):
 
     @property
     def time(self):
-        # if self._isStream:
-        #     raise NotImplementedError('')
         # http://openal.996291.n3.nabble.com/Get-Audio-time-or-buffer-position-tp1874p1875.html
         sourceID = self._sourceID
         pos = ALint()
         alGetSourcei(sourceID, AL_SAMPLE_OFFSET, byref(pos))
         self._checkError()
-        return pos.value
+        pos = pos.value
+        if self._isStream:
+            pos += self.filler.playedLength
+        return round(pos / self._reader.fps, 2)
 
     @time.setter
     def time(self, value):
@@ -191,6 +193,9 @@ class Sound(object):
             if hasattr(self, '_bufferID'):
                 # next raises 'NameError: name 'alDeleteBuffers' is not defined' when imported with *
                 delBuff(1, self._bufferID)
+            if self._isStream:
+                self.filler.terminate()
+
         except Exception as err:
             warn(str(err))
 
@@ -204,7 +209,8 @@ class BufferFillingThread(Thread):
         self.maxBufferNumber = maxBufferNumber
         self.audioReader = audioReader
         self.buffers = []
-        self.playedBuffersLenght = 0
+        self._playedBuffersLenght = 0
+        self.isFinished = False
 
         # create buffers
         buffers = (ALuint * maxBufferNumber)()
@@ -219,7 +225,7 @@ class BufferFillingThread(Thread):
         
     @property
     def playedLength(self):
-        return self.playedBuffersLenght
+        return self._playedBuffersLenght
 
     def run(self):
         processedBuffers = ALint()
@@ -229,6 +235,9 @@ class BufferFillingThread(Thread):
         sourceID = self.sourceID
 
         while reader.pos < reader.nframes:
+            if self.isFinished:
+                return
+            
             if chunk is None:
                 chunk = reader.read_chunk(bufferSize)
 
@@ -236,7 +245,7 @@ class BufferFillingThread(Thread):
 
             if processedBuffers.value > 0:
                 # new buffer available
-                self.playedBuffersLenght += bufferSize
+                self._playedBuffersLenght += bufferSize
                 
                 availableBufferID = ALuint()
                 self.unQueueBuffer(availableBufferID)
@@ -263,6 +272,10 @@ class BufferFillingThread(Thread):
 
     def _checkError(self):
         _ckerr(self.device)
+
+    def terminate(self):
+        self.isFinished = True
+        self.__del__()
 
     def __del__(self):
         for bufferID in self.buffers:

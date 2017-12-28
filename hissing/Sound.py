@@ -33,18 +33,19 @@ class StatesEnum(object):
 
 
 class Sound(object):
-    def __init__(self, manager, filePath, isStream, bufferSize, maxBufferN, ffmpegPath='ffmpeg'):
+    def __init__(self, manager, filePath, isStream=False, bufferSize=48000, maxBufferNumber=3):
         self._filePath = filePath
         self._manager = manager
         self._isStream = isStream
         self._device = manager._device
         self._bufferSize = bufferSize
-        self._ffmpegPath = ffmpegPath
+        self._ffmpegPath = manager._ffmpegPath
+        manager._sounds.append(self)
 
         bufferSize = self._bufferSize
 
         # create the frames extactor
-        reader = FFMPEG_AudioReader(ffmpegPath, filePath, bufferSize, nbytes=2)
+        reader = FFMPEG_AudioReader(self._ffmpegPath, filePath, bufferSize, nbytes=2)
         self._reader = reader
 
         # create a source
@@ -55,7 +56,7 @@ class Sound(object):
 
         # read chunk or all file
         if isStream:
-            self.filler = BufferFillingThread(manager._device, sourceID, bufferSize, maxBufferN, reader)
+            self.filler = BufferFillingThread(manager._device, sourceID, bufferSize, maxBufferNumber, reader)
             self.filler.start()
         else:
             totalBytes = reader.buffer
@@ -69,7 +70,8 @@ class Sound(object):
             self._bufferID = bufferID
 
             # upload data to buffer
-            alBufferData(bufferID, to_al_format(reader.nchannels, 8 * reader.nbytes), totalBytes, len(totalBytes), reader.fps)
+            alBufferData(bufferID, to_al_format(reader.nchannels, 8 * reader.nbytes), totalBytes, len(totalBytes),
+                         reader.fps)
             self._checkError()
 
             # bind source
@@ -231,32 +233,33 @@ class BufferFillingThread(Thread):
             chunk = audioReader.read_chunk(bufferSize)
             self.uploadData(availableBufferID, chunk)
             self.queueBuffer(availableBufferID)
-        
+
     @property
     def playedLength(self):
         return self._playedBuffersLenght
 
     def run(self):
         processedBuffers = ALint()
+        availableBufferID = ALuint()
+        chunk = None
         reader = self.audioReader
         bufferSize = self.bufferSize
-        chunk = None
         sourceID = self.sourceID
 
-        while reader.pos < reader.nframes:
-            if self.isFinished:
-                return
-            
-            if chunk is None:
+        while not self.isFinished:
+            if chunk is None and reader.pos < reader.nframes:
+                # read audio chunk from file
                 chunk = reader.read_chunk(bufferSize)
 
+            # find out if there are free buffers
             alGetSourcei(sourceID, AL_BUFFERS_PROCESSED, byref(processedBuffers))
+            self._checkError()
 
-            if processedBuffers.value > 0:
+            if processedBuffers.value > 0 and chunk is not None:
                 # new buffer available
                 self._playedBuffersLenght += bufferSize
-                
-                availableBufferID = ALuint()
+
+                # unqueue buffer from source to reuse it
                 self.unQueueBuffer(availableBufferID)
 
                 # upload data to buffer
@@ -284,8 +287,8 @@ class BufferFillingThread(Thread):
 
     def terminate(self):
         self.isFinished = True
-        self.__del__()
 
     def __del__(self):
-        for bufferID in self.buffers:
-            delBuff(1, ALuint(bufferID))
+        while len(self.buffers) < 0:
+            bufferID = ALuint(self.buffers.pop())
+            delBuff(1, bufferID)

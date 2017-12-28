@@ -6,11 +6,9 @@ from ._errorChecking import _checkError as _ckerr
 
 
 class Manager(object):
-    def __init__(self, ffmpegPath='ffmpeg', bufferSize=44100, maxBufferNumber=3):
+    def __init__(self, ffmpegPath='ffmpeg'):
         self._ffmpegPath = ffmpegPath
-        self._bufferSize = bufferSize
         self._device = None
-        self._maxBufferNumber = maxBufferNumber
         self._sounds = []
 
         device = alcOpenDevice(None)
@@ -26,11 +24,6 @@ class Manager(object):
             self._checkError()
 
         self._context = context
-
-    def loadFile(self, filePath, isStream=False):
-        sound = Sound(self, filePath, isStream, self._bufferSize, self._maxBufferNumber, self._ffmpegPath)
-        self._sounds.append(sound)
-        return sound
 
     @property
     def listenerPosition(self):

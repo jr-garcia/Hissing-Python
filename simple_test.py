@@ -1,5 +1,5 @@
 from __future__ import print_function
-from hissing import Manager, StatesEnum
+from hissing import Manager, StatesEnum, Sound
 
 sm = Manager()
 
@@ -9,7 +9,7 @@ Ice sound by Daniel Simion
 Dowmloaded from http://soundbible.com/2182-Ice-Cubes-Glass.html
 '''
 
-sound = sm.loadFile(file)
+sound = Sound(sm, file)
 sound.play()
 
 state = sound.state

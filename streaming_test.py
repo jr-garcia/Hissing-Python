@@ -1,5 +1,5 @@
 from __future__ import print_function
-from hissing import Manager, StatesEnum
+from hissing import Manager, StatesEnum, Sound
 
 sm = Manager()
 
@@ -9,7 +9,7 @@ Sound sample extracted from Big Buck Bunny short, at time 0:8:3.458
 (c) copyright 2008, Blender Foundation / www.bigbuckbunny.org
 '''
 
-sound = sm.loadFile(file, isStream=True)
+sound = Sound(sm, file, isStream=True)
 sound.play()
 
 state = sound.state

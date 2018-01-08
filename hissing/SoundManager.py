@@ -1,8 +1,38 @@
 from openal.al import *
 from openal.alc import *
+import ctypes
 
 from .Sound import Sound
 from ._errorChecking import _checkError as _ckerr
+
+
+class Listener(object):
+    def __init__(self, device):
+        self._pos = [0, 0, 0]
+        self._up = [0, 1, 0]
+        self.orientation = [0, 0, 0]
+        self._device = device
+
+    @property
+    def position(self):
+        return
+
+    @position.setter
+    def position(self, value):
+        valLen = len(value)
+        if valLen != 3:
+            raise ValueError('wrong number of elements. Expected 3, got '+ str(valLen))
+        arr = (ctypes.c_float * 3)(*value)
+        alListenerfv(AL_POSITION, arr)
+        self._checkError()
+
+        # alListener3f(AL_VELOCITY, 0, 0, 0);
+        # // check for errors
+        # alListenerfv(AL_ORIENTATION, listenerOri);
+        # // check for errors
+
+    def _checkError(self):
+        _ckerr(self._device)
 
 
 class Manager(object):
@@ -25,18 +55,11 @@ class Manager(object):
 
         self._context = context
 
-    @property
-    def listenerPosition(self):
-        return
+        self._listener = Listener(device)
 
-    @listenerPosition.setter
-    def listenerPosition(self, value):
-        alListener3f(AL_POSITION, value)
-        self._checkError()
-        # alListener3f(AL_VELOCITY, 0, 0, 0);
-        # // check for errors
-        # alListenerfv(AL_ORIENTATION, listenerOri);
-        # // check for errors
+    @property
+    def listener(self):
+        return self._listener
 
     def _checkError(self):
         _ckerr(self._device)
@@ -48,11 +71,15 @@ class Manager(object):
 
         for s in self._sounds:
             s._terminate()
-
-        context = self._context
-        device = alcGetContextsDevice(context)
-        alcMakeContextCurrent(None)
-        alcDestroyContext(context)
-        alcCloseDevice(device)
+        if hasattr(self, '_context'):
+            context = self._context
+            device = alcGetContextsDevice(context)
+            alcMakeContextCurrent(None)
+            alcDestroyContext(context)
+            alcCloseDevice(device)
+        else:
+            if hasattr(self, '_device'):
+                device = self._device
+                alcCloseDevice(device)
     
 

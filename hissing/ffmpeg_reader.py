@@ -205,7 +205,7 @@ class FFMPEG_AudioReader:
 
     """
 
-    def __init__(self, ffmpegPath, filename, buffersize, print_infos=False, fps=44100, nbytes=2, nchannels=2):
+    def __init__(self, ffmpegPath, filename, buffersize, fps=44100, nbytes=2, nchannels=2):
 
         global FFMPEG_PATH
         FFMPEG_PATH = ffmpegPath
@@ -230,9 +230,7 @@ class FFMPEG_AudioReader:
         self.buffer = None
         self.buffer_startframe = 1
         self.initialize()
-        self.buffer_around(1)
-        if print_infos:
-            print(self.proc.stderr.read())
+        # self.buffer_around(1)
 
     def initialize(self, starttime=0):
         """ Opens the file, creates the pipe. """
@@ -245,8 +243,8 @@ class FFMPEG_AudioReader:
         else:
             i_arg = ['-i', self.filename, '-vn']
 
-        cmd = ([FFMPEG_PATH] + i_arg + ['-loglevel', 'error', '-f', self.f, '-acodec', self.acodec, '-ar', "%d" % self.fps,
-                                     '-ac', '%d' % self.nchannels, '-'])
+        cmd = ([FFMPEG_PATH] + i_arg + ['-loglevel', 'error', '-f', self.f, '-acodec', self.acodec,
+                                        '-ar', "%d" % self.fps, '-ac', '%d' % self.nchannels, '-'])
 
         popen_params = {"bufsize": self.buffersize, "stdout": sp.PIPE, "stderr": sp.PIPE}
 

@@ -13,11 +13,17 @@ sound = Sound(sm, file)
 sound.play()
 
 state = sound.state
-print(state, end='')
-while state == StatesEnum.Playing:
-    pos = sound.time
-    print('\r' + state + '... Position: ' + str(pos) + ' of ' + str(sound.length), end='')
-    state = sound.state
+print(sound.state, end='')
+try:
+    while state == StatesEnum.Playing:
+        pos = sound.time
+        print('\r' + state + '... Position: ' + str(pos) + ' of ' + str(sound.length), end='')
+        state = sound.state
 
-print('\rFinished')
-sm.terminate()
+    print('\rFinished')
+except Exception:
+    raise
+except KeyboardInterrupt:
+    pass
+finally:
+    sm.terminate()

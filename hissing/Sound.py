@@ -25,7 +25,7 @@ def to_al_format(channels, samples):
         raise RuntimeError('unknown sound format')
 
 
-class StatesEnum(object):
+class SoundStatesEnum(object):
     Stopped = 'Stopped'
     Playing = 'Playing'
     Paused = 'Paused'
@@ -59,7 +59,7 @@ class Sound(object):
             self.filler = BufferFillingThread(manager._device, sourceID, bufferSize, maxBufferNumber, reader)
             self.filler.start()
         else:
-            totalBytes = reader.buffer
+            totalBytes = reader.read_chunk(bufferSize)
             while reader.pos < reader.nframes:
                 totalBytes += reader.read_chunk(bufferSize)
 
@@ -80,6 +80,18 @@ class Sound(object):
 
     def play(self):
         alSourcePlay(self._sourceID)
+        self._checkError()
+
+    def pause(self):
+        alSourcePause(self._sourceID)
+        self._checkError()
+
+    def stop(self):
+        alSourceStop(self._sourceID)
+        self._checkError()
+
+    def rewind(self):
+        alSourceRewind(self._sourceID)
         self._checkError()
 
     @property
@@ -104,7 +116,7 @@ class Sound(object):
         pos = pos.value
         if self._isStream:
             pos += self.filler.playedLength
-        return round(pos / self._reader.fps, 2)
+        return pos / self._reader.fps
 
     @time.setter
     def time(self, value):
@@ -170,23 +182,23 @@ class Sound(object):
         self._checkError()
         state = state.value
         if state == AL_PLAYING:
-            return StatesEnum.Playing
+            return SoundStatesEnum.Playing
         elif state == AL_STOPPED:
-            return StatesEnum.Stopped
+            return SoundStatesEnum.Stopped
         elif state == AL_PAUSED:
-            return StatesEnum.Paused
+            return SoundStatesEnum.Paused
         elif state == AL_INITIAL:
-            return StatesEnum.Initial
+            return SoundStatesEnum.Initial
         else:
             raise RuntimeError('unknown source state')
 
     @state.setter
     def state(self, state):
-        if state == StatesEnum.Playing:
+        if state == SoundStatesEnum.Playing:
             self.play()
-        elif state == StatesEnum.Stopped:
+        elif state == SoundStatesEnum.Stopped:
             self.stop()
-        elif state == StatesEnum.Paused:
+        elif state == SoundStatesEnum.Paused:
             self.pause()
         else:
             raise RuntimeError('\'{}\' state not allowed to set'.format(state))
@@ -287,6 +299,7 @@ class BufferFillingThread(Thread):
 
     def terminate(self):
         self.isFinished = True
+        self.__del__()
 
     def __del__(self):
         while len(self.buffers) < 0:

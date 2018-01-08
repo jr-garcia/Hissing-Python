@@ -86,7 +86,7 @@ def ffmpeg_parse_infos(filename, print_infos=False, check_duration=True, fps_sou
             line = lines_video[0]
 
             # get the size, of the form 460x320 (w x h)
-            match = re.search(" [0-9]*x[0-9]*(,| )", line)
+            match = re.search(" [0-9]*x[0-9]*([, ])", line)
             s = list(map(int, line[match.start():match.end() - 1].split('x')))
             result['video_size'] = s
         except Exception:

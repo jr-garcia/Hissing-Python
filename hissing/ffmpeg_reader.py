@@ -14,7 +14,7 @@ import re
 import subprocess as sp
 import time
 import warnings
-import numpy as np
+# import numpy as np
 
 FFMPEG_PATH = 'ffmpeg'
 
@@ -253,7 +253,7 @@ class FFMPEG_AudioReader:
 
         self.proc = sp.Popen(cmd, **popen_params)
 
-        self.pos = np.round(self.fps * starttime)
+        self.pos = round(self.fps * starttime)
 
     def skip_chunk(self, chunksize):
         self.proc.stdout.read(self.nchannels * chunksize * self.nbytes)
@@ -265,11 +265,6 @@ class FFMPEG_AudioReader:
         chunksize = int(round(chunksize))
         L = self.nchannels * chunksize * self.nbytes
         s = self.proc.stdout.read(L)
-        # dt = {1: 'uint8', 2: 'int16', 4: 'int32'}[self.nbytes]
-        # result = np.fromstring(s, dtype=dt)
-        # result = (1.0 * result / 2 ** (8 * self.nbytes - 1)). \
-        #         reshape((int(len(result) / self.nchannels), self.nchannels))
-        # # self.proc.stdout.flush()
         self.pos = self.pos + chunksize
         return s
 
@@ -298,86 +293,42 @@ class FFMPEG_AudioReader:
             self.proc = None
 
     def get_frame(self, tt):
-        # buffersize = self.buffersize
-        if isinstance(tt, np.ndarray):
-            # lazy implementation, but should not cause problems in
-            # 99.99 %  of the cases
-            # elements of t that are actually in the range of the
-            # audio file.
-            in_time = (tt >= 0) & (tt < self.duration)
+        ind = int(self.fps * tt)
+        if ind < 0 or ind > self.nframes:  # out of time: return 0
+            return bytes(self.nchannels)
 
-            # Check that the requested time is in the valid range
-            if not in_time.any():
-                raise IOError("Error in file %s, " % self.filename + "Accessing time t=%.02f-%.02f seconds, " % (
-                    tt[0], tt[-1]) + "with clip duration=%d seconds, " % self.duration)
+        # if not (0 <= (ind - self.buffer_startframe) < len(self.buffer)):
+        #     # out of the buffer: recenter the buffer
+        #     self.buffer_around(ind)
 
-            # The np.round in the next line is super-important.
-            # Removing it results in artifacts in the noise.
-            frames = np.round((self.fps * tt)).astype(int)[in_time]
-            fr_min, fr_max = frames.min(), frames.max()
+        # read the frame in the buffer
+        return self.buffer[ind - self.buffer_startframe]
 
-            if not (0 <= (fr_min - self.buffer_startframe) < len(self.buffer)):
-                self.buffer_around(fr_min)
-            elif not (0 <= (fr_max - self.buffer_startframe) < len(self.buffer)):
-                self.buffer_around(fr_max)
-
-            try:
-                result = np.zeros((len(tt), self.nchannels))
-                indices = frames - self.buffer_startframe
-                if len(self.buffer) < self.buffersize // 2:
-                    indices = indices - (self.buffersize // 2 - len(self.buffer) + 1)
-                result[in_time] = self.buffer[indices]
-                return result
-
-            except IndexError as error:
-                warnings.warn("Error in file %s, " % self.filename + "At time t=%.02f-%.02f seconds, " % (
-                    tt[0], tt[-1]) + "indices wanted: %d-%d, " % (
-                                  indices.min(), indices.max()) + "but len(buffer)=%d\n" % (len(self.buffer)) + str(
-                        error), UserWarning)
-
-                # repeat the last frame instead
-                indices[indices >= len(self.buffer)] = len(self.buffer) - 1
-                result[in_time] = self.buffer[indices]
-                return result
-
-        else:
-
-            ind = int(self.fps * tt)
-            if ind < 0 or ind > self.nframes:  # out of time: return 0
-                return np.zeros(self.nchannels)
-
-            if not (0 <= (ind - self.buffer_startframe) < len(self.buffer)):
-                # out of the buffer: recenter the buffer
-                self.buffer_around(ind)
-
-            # read the frame in the buffer
-            return self.buffer[ind - self.buffer_startframe]
-
-    def buffer_around(self, framenumber):
-        """
-        Fills the buffer with frames, centered on ``framenumber``
-        if possible
-        """
-
-        # start-frame for the buffer
-        new_bufferstart = max(0, framenumber - self.buffersize // 2)
-
-        if self.buffer is not None:
-            current_f_end = self.buffer_startframe + self.buffersize
-            if new_bufferstart < current_f_end < new_bufferstart + self.buffersize:
-                # We already have one bit of what must be read
-                conserved = current_f_end - new_bufferstart + 1
-                chunksize = self.buffersize - conserved
-                array = self.read_chunk(chunksize)
-                self.buffer = np.vstack([self.buffer[-conserved:], array])
-            else:
-                self.seek(new_bufferstart)
-                self.buffer = self.read_chunk(self.buffersize)
-        else:
-            self.seek(new_bufferstart)
-            self.buffer = self.read_chunk(self.buffersize)
-
-        self.buffer_startframe = new_bufferstart
+    # def buffer_around(self, framenumber):
+    #     """
+    #     Fills the buffer with frames, centered on ``framenumber``
+    #     if possible
+    #     """
+    #
+    #     # start-frame for the buffer
+    #     new_bufferstart = max(0, framenumber - self.buffersize // 2)
+    #
+    #     if self.buffer is not None:
+    #         current_f_end = self.buffer_startframe + self.buffersize
+    #         if new_bufferstart < current_f_end < new_bufferstart + self.buffersize:
+    #             # We already have one bit of what must be read
+    #             conserved = current_f_end - new_bufferstart + 1
+    #             chunksize = self.buffersize - conserved
+    #             array = self.read_chunk(chunksize)
+    #             self.buffer = np.vstack([self.buffer[-conserved:], array])
+    #         else:
+    #             self.seek(new_bufferstart)
+    #             self.buffer = self.read_chunk(self.buffersize)
+    #     else:
+    #         self.seek(new_bufferstart)
+    #         self.buffer = self.read_chunk(self.buffersize)
+    #
+    #     self.buffer_startframe = new_bufferstart
 
     def __del__(self):
         # If the garbage collector comes, make sure the subprocess is terminated.

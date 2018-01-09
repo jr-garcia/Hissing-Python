@@ -25,7 +25,7 @@ def to_al_format(channels, samples):
         raise RuntimeError('unknown sound format')
 
 
-class SoundStatesEnum(object):
+class StatesEnum(object):
     Stopped = 'Stopped'
     Playing = 'Playing'
     Paused = 'Paused'
@@ -40,13 +40,14 @@ class Sound(object):
         self._device = manager._device
         self._bufferSize = bufferSize
         self._ffmpegPath = manager._ffmpegPath
+
+        if isinstance(filePath, Sound):
+            shareBufferFrom = filePath
+            filePath = shareBufferFrom.filePath
+        else:
+            shareBufferFrom = None
+
         manager._sounds.append(self)
-
-        bufferSize = self._bufferSize
-
-        # create the frames extactor
-        reader = FFMPEG_AudioReader(self._ffmpegPath, filePath, bufferSize, nbytes=2)
-        self._reader = reader
 
         # create a source
         sourceID = ALuint()
@@ -54,26 +55,33 @@ class Sound(object):
         self._checkError()
         self._sourceID = sourceID
 
+        # create the frames extractor
+        reader = FFMPEG_AudioReader(self._ffmpegPath, filePath, bufferSize, nbytes=2)
+        self._fps = reader.fps
+        self._nframes = reader.nframes
+
         # read chunk or all file
         if isStream:
             self.filler = BufferFillingThread(manager._device, sourceID, bufferSize, maxBufferNumber, reader)
             self.filler.start()
         else:
-            totalBytes = reader.read_chunk(bufferSize)
-            while reader.pos < reader.nframes:
-                totalBytes += reader.read_chunk(bufferSize)
+            if shareBufferFrom is None:
+                totalBytes = reader.read_chunk(bufferSize)
+                while reader.pos < reader.nframes:
+                    totalBytes += reader.read_chunk(bufferSize)
 
-            # create a buffer
-            bufferID = ALuint()
-            alGenBuffers(1, byref(bufferID))
-            self._checkError()
+                # create a buffer
+                bufferID = ALuint()
+                alGenBuffers(1, byref(bufferID))
+                self._checkError()
+                # upload data to buffer
+                alBufferData(bufferID, to_al_format(reader.nchannels, 8 * reader.nbytes), totalBytes, len(totalBytes),
+                             reader.fps)
+                self._checkError()
+            else:
+                bufferID = ALuint(shareBufferFrom._bufferID)
+
             self._bufferID = bufferID
-
-            # upload data to buffer
-            alBufferData(bufferID, to_al_format(reader.nchannels, 8 * reader.nbytes), totalBytes, len(totalBytes),
-                         reader.fps)
-            self._checkError()
-
             # bind source
             alSourcei(sourceID, AL_BUFFER, bufferID.value)
             self._checkError()
@@ -109,14 +117,13 @@ class Sound(object):
     @property
     def time(self):
         # http://openal.996291.n3.nabble.com/Get-Audio-time-or-buffer-position-tp1874p1875.html
-        sourceID = self._sourceID
         pos = ALint()
-        alGetSourcei(sourceID, AL_SAMPLE_OFFSET, byref(pos))
+        alGetSourcei(self._sourceID, AL_SAMPLE_OFFSET, byref(pos))
         self._checkError()
         pos = pos.value
         if self._isStream:
             pos += self.filler.playedLength
-        return pos / self._reader.fps
+        return pos / self._fps
 
     @time.setter
     def time(self, value):
@@ -124,8 +131,7 @@ class Sound(object):
 
     @property
     def length(self):
-        reader = self._reader
-        return reader.nframes / reader.fps
+        return self._nframes / self._fps
 
     @length.setter
     def length(self, value):
@@ -138,7 +144,7 @@ class Sound(object):
     @position.setter
     def position(self, value):
         x, y, z = value
-        alSource3f(sourceID, AL_POSITION, x, y, z)  # todo: change to handle vector
+        alSource3f(self._sourceID, AL_POSITION, x, y, z)  # todo: change to handle vector
         self._checkError()
 
     @property
@@ -148,31 +154,31 @@ class Sound(object):
     @velocity.setter
     def velocity(self, value):
         x, y, z = value
-        alSource3f(sourceID, AL_VELOCITY, x, y, z)  # todo: change to handle vector
+        alSource3f(self._sourceID, AL_VELOCITY, x, y, z)  # todo: change to handle vector
         self._checkError()
 
     @property
     def volume(self):
         val = ALuint()
-        alGetSourcef(sourceID, AL_GAIN, byref(val))
+        alGetSourcef(self._sourceID, AL_GAIN, byref(val))
         self._checkError()
         return val.value * 100
 
     @volume.setter
     def volume(self, value):
-        alSourcef(sourceID, AL_GAIN, value / 100)
+        alSourcef(self._sourceID, AL_GAIN, value / 100)
         self._checkError()
 
     @property
     def pitch(self):
         val = ALuint()
-        alGetSourcef(sourceID, AL_PITCH, byref(val))
+        alGetSourcef(self._sourceID, AL_PITCH, byref(val))
         self._checkError()
         return val.value * 100
 
     @pitch.setter
     def pitch(self, value):
-        alSourcef(sourceID, AL_PITCH, value / 100)
+        alSourcef(self._sourceID, AL_PITCH, value / 100)
         self._checkError()
 
     @property
@@ -180,25 +186,25 @@ class Sound(object):
         state = ALint()
         alGetSourcei(self._sourceID, AL_SOURCE_STATE, byref(state))
         self._checkError()
-        state = state.value
-        if state == AL_PLAYING:
-            return SoundStatesEnum.Playing
-        elif state == AL_STOPPED:
-            return SoundStatesEnum.Stopped
-        elif state == AL_PAUSED:
-            return SoundStatesEnum.Paused
-        elif state == AL_INITIAL:
-            return SoundStatesEnum.Initial
+        stateValue = state.value
+        if stateValue == AL_PLAYING:
+            return StatesEnum.Playing
+        elif stateValue == AL_STOPPED:
+            return StatesEnum.Stopped
+        elif stateValue == AL_PAUSED:
+            return StatesEnum.Paused
+        elif stateValue == AL_INITIAL:
+            return StatesEnum.Initial
         else:
             raise RuntimeError('unknown source state')
 
     @state.setter
     def state(self, state):
-        if state == SoundStatesEnum.Playing:
+        if state == StatesEnum.Playing:
             self.play()
-        elif state == SoundStatesEnum.Stopped:
+        elif state == StatesEnum.Stopped:
             self.stop()
-        elif state == SoundStatesEnum.Paused:
+        elif state == StatesEnum.Paused:
             self.pause()
         else:
             raise RuntimeError('\'{}\' state not allowed to set'.format(state))
@@ -221,6 +227,9 @@ class Sound(object):
 
         except Exception as err:
             warn(str(err))
+
+    def copy(self):
+        return Sound(self._manager, self, self._isStream, self._bufferSize, self.maxBufferN)
 
 
 class BufferFillingThread(Thread):

@@ -16,7 +16,7 @@ state = sound.state
 print(sound.state, end='')
 try:
     while state == StatesEnum.Playing:
-        pos = sound.time
+        pos = round(sound.time, 2)
         print('\r' + state + '... Position: ' + str(pos) + ' of ' + str(sound.length), end='')
         state = sound.state
 

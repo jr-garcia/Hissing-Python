@@ -21,7 +21,7 @@ class Listener(object):
     def position(self, value):
         valLen = len(value)
         if valLen != 3:
-            raise ValueError('wrong number of elements. Expected 3, got '+ str(valLen))
+            raise ValueError('wrong number of elements. Expected 3, got ' + str(valLen))
         arr = (ctypes.c_float * 3)(*value)
         alListenerfv(AL_POSITION, arr)
         self._checkError()
@@ -68,7 +68,6 @@ class Manager(object):
         self.__del__()
 
     def __del__(self):
-
         for s in self._sounds:
             s._terminate()
         if hasattr(self, '_context'):
@@ -81,5 +80,3 @@ class Manager(object):
             if hasattr(self, '_device'):
                 device = self._device
                 alcCloseDevice(device)
-    
-

@@ -61,3 +61,4 @@ venv.bak/
 .mypy_cache/
 
 /.idea
+*.py[cod]

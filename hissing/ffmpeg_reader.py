@@ -32,10 +32,7 @@ def ffmpeg_parse_infos(filename, print_infos=False, check_duration=True, fps_sou
     """
 
     # open the file in a pipe, provoke an error, read output
-    is_GIF = filename.endswith('.gif')
     cmd = [FFMPEG_PATH, "-i", filename]
-    if is_GIF:
-        cmd += ["-f", "null", "/dev/null"]
 
     popen_params = {"bufsize": 10 ** 5, "stdout": sp.PIPE, "stderr": sp.PIPE}
 
@@ -66,9 +63,8 @@ def ffmpeg_parse_infos(filename, print_infos=False, check_duration=True, fps_sou
 
     if check_duration:
         try:
-            keyword = ('frame=' if is_GIF else 'Duration: ')
-            # for large GIFS the "full" duration is presented as the last element in the list.
-            index = -1 if is_GIF else 0
+            keyword = 'Duration: '
+            index = 0
             line = [l for l in lines if keyword in l][index]
             match = re.findall("([0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9])", line)[0]
             result['duration'] = convertTime(match)
@@ -210,13 +206,13 @@ class FFMPEG_AudioReader:
         global FFMPEG_PATH
         FFMPEG_PATH = ffmpegPath
 
-        self.filename = filename
+        self.filename = os.path.abspath(filename)
         self.nbytes = nbytes
         self.fps = fps
         self.f = 's%dle' % (8 * nbytes)
         self.acodec = 'pcm_s%dle' % (8 * nbytes)
         self.nchannels = nchannels
-        infos = ffmpeg_parse_infos(filename)
+        infos = ffmpeg_parse_infos(self.filename)
         self.duration = infos['duration']
         if 'video_duration' in infos:
             self.duration = infos['video_duration']

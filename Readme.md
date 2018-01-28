@@ -1,1 +1,1 @@
-OpenAL Sound System for Python
+Simple Sound System for Python using OpenAL and FFMPEG.
